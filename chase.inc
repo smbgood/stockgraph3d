@@ -40,38 +40,51 @@ function helloworld_stock(){
 	$avgVolume = 0;
 	$avgPrice = 0;
 	echo "<html><head><title>hi</title><style> body { margin: 0; } canvas { width: 100%; height: 100%  </style></head><body>";
-	echo "<script src='jquery-2.1.4.min.js'></script>";
-	echo "<script src='three.min.js'></script>";	
-	echo "<script src='Detector.js'></script>";
-	echo "<script src='OrbitControls.js'></script>";
-	echo "<script src='THREEx.FullScreen.js'></script>";
-	echo "<script src='THREEx.KeyboardState.js'></script>";
-	echo "<script src='THREEx.WindowResize.js'></script>";
+	echo "<script src='js/jquery-2.1.4.min.js'></script>";
+	echo "<script src='js/three.min.js'></script>";	
+	echo "<script src='js/Detector.js'></script>";
+	echo "<script src='js/OrbitControls.js'></script>";
+	echo "<script src='js/THREEx.FullScreen.js'></script>";
+	echo "<script src='js/THREEx.KeyboardState.js'></script>";
+	echo "<script src='js/THREEx.WindowResize.js'></script>";
 	
 	echo "<div id='3JS' style='z-index: 1; position: absolute; left:0px; top:0px'></div>";
 	
 	echo "<script> var stockData = []; var week;";
  
-	for( $y = 1; $y <= $x; $y++){
+	for( $y = 1; $y <= 100; $y++){
 		$current = $csv[$y];
 		if($avgPrice == 0){
 		    $avgPrice = $current[4];
 		}else{
 		    $avgPrice = ($avgPrice + $current[4]) /2;
 		}
+		if($avgPrice != 0){
 		$price_percent = -1 * ($avgPrice - $current[4]) / $avgPrice;
-		$range_percent = ($current[2] - $current[3]) / ( ($current[1] + $current[4])/2 );
-		if($avgVolume == 0){
-			$avgVolume = $current[5];			
 		}else{
-			$avgVolume = ($avgVolume + $current[5]) / 2;
+		$price_percent = 0;
 		}
-		$volume_percent = -1 * ($avgVolume - $current[5]) / $avgVolume ;
+		if($current[1] != 0 && $current[4] != 0){
+		$range_percent = ($current[2] - $current[3]) / ( ($current[1] + $current[4])/2 );
+		}else{
+		$range_percent = 0;
+		}
+		if($avgVolume == 0){
+		    $avgVolume = $current[5];			
+		}else{
+		    $avgVolume = ($avgVolume + $current[5]) / 2;
+		}
+		if($avgVolume != 0){
+		    $volume_percent = -1 * ($avgVolume - $current[5]) / $avgVolume ;
+		}else{
+		    $volume_percent = 0;
+		}
+		
 		echo "week = {}; week.raw = []; week.price = $price_percent; week.range = $range_percent; week.volume = $volume_percent; week.raw[0] = {$current[0]}; week.raw[1] = {$current[1]}; week.raw[2] = {$current[2]}; week.raw[3] = {$current[3]}; week.raw[4] = {$current[4]}; week.raw[5] = {$current[5]};     stockData.push(week);";
 	}
 	echo "</script>";	
 	
-	echo "<script src='dat.gui.min.js'></script>";	
+	echo "<script src='js/dat.gui.min.js'></script>";	
 	echo "<script src ='stockgraph3d.js'></script>";
 	
 	//dom now has .dg .ac thing, correct z-index
