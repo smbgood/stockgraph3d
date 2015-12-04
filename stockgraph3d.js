@@ -16,7 +16,7 @@ var gridXY, gridYZ, gridXZ;
 
 var projector, mouseVector;
 
-var pSystem;
+var particles = [];
 
 var Parameters;
 
@@ -25,8 +25,6 @@ var keyboard = new THREEx.KeyboardState();
 var clock = new THREE.Clock();
 
 var dataAmount = 10;
-
-var arcLength = 10;
 
 var factor = 1000;	
 
@@ -75,8 +73,8 @@ function init()
 	scene.add(light);
 	
 	mouseVector = new THREE.Vector3();
-
 	window.addEventListener( 'mousemove', onMouseMove, false);
+
 	/*
 	// FLOOR
 	var floorTexture = new THREE.ImageUtils.loadTexture( 'images/checkerboard.jpg' );
@@ -159,9 +157,7 @@ function onMouseMove( e ) {
 
 		var raycaster = new THREE.Raycaster();
 		raycaster.setFromCamera(mouseVector, camera);
-		var arrayToFind = [];
-		arrayToFind.push(pSystem);
-		var intersects = raycaster.intersectObjects( arrayToFind);
+		var intersects = raycaster.intersectObjects(particles);
 
 		for( var i = 0; i < intersects.length; i++ ) {
 			var intersection = intersects[ i ],
@@ -191,17 +187,28 @@ function createGraph(){
 	graphedLine = new THREE.Line(stockGraph, lineMaterial);
 	scene.add(graphedLine);
 
-	var particles = new THREE.Geometry(),
-    pMaterial = new THREE.PointsMaterial({
+	var pMaterial = new THREE.PointsMaterial({
       color: 0x2222FF,
       size: 5
     });
-    particles.vertices = stockGraph.vertices;
-    if(pSystem){
-    	scene.remove(pSystem);
+
+	if(particles.length > 0){
+    	scene.remove(particles);
+    	particles = [];
+    }    	
+
+    for(i = 0; i<stockGraph.vertices.length; i++){
+    	var geo = new THREE.Geometry();
+    	geo.vertices.push(stockGraph.vertices[i]);
+    	var pMaterial = new THREE.PointsMaterial({
+      		color: 0x2222FF,
+      		size: 5
+    	});
+		var particle = new THREE.Points(geo, pMaterial);
+		particles.push(particle);		
+		scene.add(particle);
     }
-    pSystem = new THREE.Points(particles, pMaterial);
-    scene.add(pSystem);
+        
 
 	/*if(shownSprites.length > 0){
 		for(i=0; i< shownSprites.length;i++){
