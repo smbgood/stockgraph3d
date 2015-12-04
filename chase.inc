@@ -52,7 +52,7 @@ function helloworld_stock(){
 	
 	echo "<script> var stockData = []; var week;";
  
-	for( $y = 1; $y <= 100; $y++){
+	for( $y = 1; $y < $x; $y++){
 		$current = $csv[$y];
 		if($avgPrice == 0){
 		    $avgPrice = $current[4];
