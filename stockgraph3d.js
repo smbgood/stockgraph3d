@@ -12,6 +12,12 @@
 // standard global variables
 var container, scene, camera, renderer, controls, gui;
 
+var gridXY, gridYZ, gridXZ;
+
+var projector, mouseVector;
+
+var pSystem;
+
 var Parameters;
 
 var graphedLine;
@@ -20,12 +26,19 @@ var clock = new THREE.Clock();
 
 var dataAmount = 10;
 
+var arcLength = 10;
+
+var factor = 1000;	
+
 var displayToggle = true;
 
 var autoUpdate = true;
 
-// custom global variables
-var mesh;
+var gridlinesShowing = true;
+
+var shownSprites = [];
+
+var SCREEN_WIDTH, SCREEN_HEIGHT;
 
 init();
 animate();
@@ -36,7 +49,8 @@ function init()
 	// SCENE
 	scene = new THREE.Scene();
 	// CAMERA
-	var SCREEN_WIDTH = window.innerWidth, SCREEN_HEIGHT = window.innerHeight;
+	SCREEN_WIDTH = window.innerWidth;
+	SCREEN_HEIGHT = window.innerHeight;
 	var VIEW_ANGLE = 45, ASPECT = SCREEN_WIDTH / SCREEN_HEIGHT, NEAR = 0.1, FAR = 20000;
 	camera = new THREE.PerspectiveCamera( VIEW_ANGLE, ASPECT, NEAR, FAR);
 	scene.add(camera);
@@ -48,7 +62,7 @@ function init()
 	else
 		renderer = new THREE.CanvasRenderer(); 
 	renderer.setSize(SCREEN_WIDTH, SCREEN_HEIGHT);
-	container = document.getElementById( '3JS' );
+	container = document.getElementById( '3JS' );	
 	container.appendChild( renderer.domElement );
 	// EVENTS
 	THREEx.WindowResize(renderer, camera);
@@ -59,6 +73,10 @@ function init()
 	var light = new THREE.PointLight(0xffffff);
 	light.position.set(100,250,100);
 	scene.add(light);
+	
+	mouseVector = new THREE.Vector3();
+
+	window.addEventListener( 'mousemove', onMouseMove, false);
 	/*
 	// FLOOR
 	var floorTexture = new THREE.ImageUtils.loadTexture( 'images/checkerboard.jpg' );
@@ -77,66 +95,52 @@ function init()
 	var skyBox = new THREE.Mesh( skyBoxGeometry, skyBoxMaterial );
 	scene.add(skyBox);*/
 
-	var gridXZ = new THREE.GridHelper(100, 10);
+	gridXZ = new THREE.GridHelper(100, 10);
 	gridXZ.setColors( new THREE.Color(0x006600), new THREE.Color(0x006600) );
 	gridXZ.position.set( 0,0,0 );
 	scene.add(gridXZ);
 	
-	var gridXY = new THREE.GridHelper(100, 10);
+	gridXY = new THREE.GridHelper(100, 10);
 	gridXY.position.set( 0,0,0 );
 	gridXY.rotation.x = Math.PI/2;
 	gridXY.setColors( new THREE.Color(0x000066), new THREE.Color(0x000066) );
 	scene.add(gridXY);
 
-	var gridYZ = new THREE.GridHelper(100, 10);
+	gridYZ = new THREE.GridHelper(100, 10);
 	gridYZ.position.set( 0,0,0 );
 	gridYZ.rotation.z = Math.PI/2;
 	gridYZ.setColors( new THREE.Color(0x660000), new THREE.Color(0x660000) );
 	scene.add(gridYZ);
 
-	var geometry = new THREE.SphereGeometry( 100, 4, 3 );
-	geometry.mergeVertices();	
-	var material = new THREE.MeshNormalMaterial();
-	mesh = new THREE.Mesh( geometry, material );
-	mesh.position.set(0,0,0);
-	var otherMesh = new THREE.EdgesHelper(mesh, 0x00ff00, 0.1);	
-	scene.add(otherMesh);
-	//scene.add(mesh);
-
-	/*var axes = new THREE.AxisHelper(200);
-	axes.position = mesh.position;
-	scene.add(axes);*/
-
-
-	var factor = 1000;	
-	var lineMaterial = new THREE.LineBasicMaterial({color: 0x0000aa, linewidth: 10, transparent: true});
-	var stockGraph = new THREE.Geometry();	
-	for(var i =0; i<dataAmount; i++){
-		var weekData = stockData[i];		
-		var p = parseFloat(weekData.price) * factor;
-		var r = parseFloat(weekData.range) * factor;
-		var v = parseFloat(weekData.volume) * (factor/2);
-		stockGraph.vertices.push(new THREE.Vector3(p, r, v));
-		console.log("P:" + p + "  R:" + r + "  V:" + v );
-	}
-	graphedLine = new THREE.Line(stockGraph, lineMaterial);
-	scene.add(graphedLine);
+	var sphere = new THREE.SphereGeometry( 100, 4, 3 );
+	sphere.mergeVertices();	
+	var sphereMaterial = new THREE.MeshNormalMaterial();
+	var sphereMesh = new THREE.Mesh( sphere, sphereMaterial );
+	sphereMesh.position.set(0,0,0);
+	hexCubeMesh = new THREE.EdgesHelper(sphereMesh, 0x00ff00, 0.1);	
+	scene.add(hexCubeMesh);
 
 	gui = new dat.GUI();
 	
 	Parameters = function()
 	{		
-		this.finalValue = function(){ console.log('its the final value');};				
+		this.stockName = "DIS";				
 	};
 
 	var params = new Parameters();
 
-	gui.add(params, 'finalValue').name('Stock Name');
-	var gui_range_weeks = gui.add(this, 'dataAmount', 10, 100).name('# of weeks');
+	var gui_stock_name = gui.add(params, 'stockName').name('Stock Name');
+	var gui_mult_factor = gui.add(this, 'factor', 1, 5000).name('* factor');
+	var gui_range_weeks = gui.add(this, 'dataAmount', 1, stockData.length).name('# of weeks');
 	var gui_display_toggle = gui.add(this, 'displayToggle').name('Display Toggle');	
 	autoUpdate = true;
 
-	gui_range_weeks.onChange( function(value) { console.log('something happuned'); if(autoUpdate){ createGraph(); } } );
+	gui_range_weeks.onChange( function(value) { if(autoUpdate){ createGraph(); } } );
+	gui_mult_factor.onChange( function(value) { if(autoUpdate){ createGraph(); } } );
+	gui_display_toggle.onChange( function(value){ toggleGridlines(value);});
+
+	gui_mult_factor.setValue(1000);
+	gui_range_weeks.setValue(10);	
 
 	/*for (var i = 0; i < geometry.vertices.length; i++)
 	{
@@ -144,11 +148,34 @@ function init()
 		spritey.position = geometry.vertices[i].clone().multiplyScalar(1.1);
 		scene.add( spritey );
 	}*/
+
+	createGraph();
 }
 
-function createGraph(){
-	var factor = 1000;	
-	var lineMaterial = new THREE.LineBasicMaterial({color: 0x0000aa, linewidth: 10, transparent: true});
+function onMouseMove( e ) {
+		
+		mouseVector.x = 2 * (e.clientX / SCREEN_WIDTH) - 1;
+		mouseVector.y = 1 - 2 * ( e.clientY / SCREEN_HEIGHT );
+
+		var raycaster = new THREE.Raycaster();
+		raycaster.setFromCamera(mouseVector, camera);
+		var arrayToFind = [];
+		arrayToFind.push(pSystem);
+		var intersects = raycaster.intersectObjects( arrayToFind);
+
+		for( var i = 0; i < intersects.length; i++ ) {
+			var intersection = intersects[ i ],
+				obj = intersection.object;
+
+			obj.material.color.setRGB( 1.0 - i / intersects.length, 0, 0 );
+		}
+
+		console.log('moved!' + intersects.length);
+
+}
+
+function createGraph(){	
+	var lineMaterial = new THREE.LineBasicMaterial( { color: 0xffffff, opacity: 1, linewidth: 10 } );	
 	var stockGraph = new THREE.Geometry();	
 	for(var i =0; i<dataAmount; i++){
 		var weekData = stockData[i];		
@@ -159,10 +186,61 @@ function createGraph(){
 		console.log("P:" + p + "  R:" + r + "  V:" + v );
 	}
 	if(graphedLine){
-		scene.remove(graphedLine);
+		scene.remove(graphedLine);		
 	}
 	graphedLine = new THREE.Line(stockGraph, lineMaterial);
 	scene.add(graphedLine);
+
+	var particles = new THREE.Geometry(),
+    pMaterial = new THREE.PointsMaterial({
+      color: 0x2222FF,
+      size: 5
+    });
+    particles.vertices = stockGraph.vertices;
+    if(pSystem){
+    	scene.remove(pSystem);
+    }
+    pSystem = new THREE.Points(particles, pMaterial);
+    scene.add(pSystem);
+
+	/*if(shownSprites.length > 0){
+		for(i=0; i< shownSprites.length;i++){
+			scene.remove(shownSprites[i]);
+		}
+		shownSprites = [];
+	}
+
+	for (i = 0; i < stockGraph.vertices.length; i++)
+	{
+		var spritey = makeTextSprite( " " + i + " ", { fontsize: 32, backgroundColor: {r:255, g:100, b:100, a:1} } );
+		spritey.position = stockGraph.vertices[i].clone().multiplyScalar(1.1);
+		scene.add( spritey );
+		shownSprites.push(spritey);
+	}*/
+}
+
+function toggleGridlines( value){
+	if(value){
+		if(gridlinesShowing){
+			return;
+		}else{
+			scene.add(gridXY);
+			scene.add(gridYZ);
+			scene.add(gridXZ);
+			scene.add(hexCubeMesh);
+			gridlinesShowing = true;
+		}
+	}else{
+		if(!gridlinesShowing){
+			return;
+		}else{
+			scene.remove(gridXZ);
+			scene.remove(gridYZ);
+			scene.remove(gridXY);
+			scene.remove(hexCubeMesh);
+			gridlinesShowing = false;
+		}
+	}
 }
 
 function makeTextSprite( message, parameters )
