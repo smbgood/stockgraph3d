@@ -16,8 +16,6 @@ var gridXY, gridYZ, gridXZ;
 
 var projector, mouseVector;
 
-var particles = [];
-
 var Parameters;
 
 var graphedLine;
@@ -28,15 +26,14 @@ var dataAmount = 10;
 
 var factor = 1000;	
 
-var displayToggle = true;
-
-var autoUpdate = true;
-
-var gridlinesShowing = true;
-
-var shownSprites = [];
+var autoUpdate = true, gridlinesShowing = true, displayToggle = true;
 
 var SCREEN_WIDTH, SCREEN_HEIGHT;
+
+var selectedPoints = [], graphedLines = [], shownSprites = [], particles = [];
+
+var weekStart = 0;
+
 
 init();
 animate();
@@ -72,8 +69,8 @@ function init()
 	light.position.set(100,250,100);
 	scene.add(light);
 	
-	mouseVector = new THREE.Vector3();
-	window.addEventListener( 'mousemove', onMouseMove, false);
+	mouseVector = new THREE.Vector3();	
+	window.addEventListener( 'mousedown', onMouseDown, false);
 
 	/*
 	// FLOOR
@@ -122,23 +119,33 @@ function init()
 	
 	Parameters = function()
 	{		
-		this.stockName = "DIS";				
+		this.stockName = "DIS";
+		this.drawSplines = function(){ drawSplines(); };				
 	};
 
 	var params = new Parameters();
 
 	var gui_stock_name = gui.add(params, 'stockName').name('Stock Name');
 	var gui_mult_factor = gui.add(this, 'factor', 1, 5000).name('* factor');
-	var gui_range_weeks = gui.add(this, 'dataAmount', 1, stockData.length).name('# of weeks');
+	var gui_week_start = gui.add(this, 'weekStart', 0, stockData.length).name('start');
+	var gui_range_weeks = gui.add(this, 'dataAmount', 1, stockData.length - 1).name('# of weeks');
 	var gui_display_toggle = gui.add(this, 'displayToggle').name('Display Toggle');	
+	var gui_draw_splines = gui.add(this, 'drawSplines').name('Draw Splines');
+	var gui_hide_splines = gui.add(this, 'hideSplines').name('Hide Splines');
+	var gui_select_points = gui.add(this, 'resetSelectedPoints').name('Reset Points Selected');
+
 	autoUpdate = true;
 
 	gui_range_weeks.onChange( function(value) { if(autoUpdate){ createGraph(); } } );
 	gui_mult_factor.onChange( function(value) { if(autoUpdate){ createGraph(); } } );
+	gui_week_start.onChange( function(value){ if(autoUpdate){ createGraph(); }});
 	gui_display_toggle.onChange( function(value){ toggleGridlines(value);});
+	gui_hide_splines.onChange(function (value){ hideSplines();});
+	gui_select_points.onChange(function (value){ resetSelectedPoints(); });
 
 	gui_mult_factor.setValue(1000);
 	gui_range_weeks.setValue(10);	
+	gui_week_start.setValue(0);
 
 	/*for (var i = 0; i < geometry.vertices.length; i++)
 	{
@@ -150,30 +157,84 @@ function init()
 	createGraph();
 }
 
-function onMouseMove( e ) {
-		
-		mouseVector.x = 2 * (e.clientX / SCREEN_WIDTH) - 1;
-		mouseVector.y = 1 - 2 * ( e.clientY / SCREEN_HEIGHT );
+function resetSelectedPoints(){
+	for(var j=0; j<selectedPoints.length;j++){
+		selectedPoints[j].material.color.setRGB(0.1, 0.1, 1);
+	}
+	selectedPoints = [];
+}
 
-		var raycaster = new THREE.Raycaster();
-		raycaster.setFromCamera(mouseVector, camera);
-		var intersects = raycaster.intersectObjects(particles);
+function hideSplines(){
+	for(var i = 0; i<graphedLines.length; i++){
+		scene.remove(graphedLines[i]);
+	}
+}
 
-		for( var i = 0; i < intersects.length; i++ ) {
-			var intersection = intersects[ i ],
-				obj = intersection.object;
+function drawSplines(){
+	if(selectedPoints.length > 0){		
+		var vectorArray = [];
+		for(var o = 0; o<selectedPoints.length;o++){
+			vectorArray.push(selectedPoints[o].geometry.vertices[0]);
+		}
+		var ourCurve = new THREE.CatmullRomCurve3( vectorArray);
 
-			obj.material.color.setRGB( 1.0 - i / intersects.length, 0, 0 );
+		var extrudeSettings = { steps: 200, bevelEnabled: false, extrudePath: ourCurve};
+
+		var pts = [], numPts = 5;
+
+		for ( var i = 0; i < numPts * 2; i ++ ) {
+
+			var l = i % 2 == 1 ? 1 : 2;
+
+			var a = i / numPts * Math.PI;
+
+			pts.push( new THREE.Vector2 ( Math.cos( a ) * l, Math.sin( a ) * l ) );
+
 		}
 
-		console.log('moved!' + intersects.length);
+		var ourShape = new THREE.Shape( pts );
+		var finalGeometry = new THREE.ExtrudeGeometry( ourShape, extrudeSettings );
 
+		var material2 = new THREE.MeshLambertMaterial( { color: 0xff0000, wireframe: false } );
+
+		var ourMesh = new THREE.Mesh( finalGeometry, material2 );
+
+		scene.add( ourMesh );		
+		graphedLines.push(ourMesh);
+	}
+}
+
+function onMouseDown(e){
+
+	mouseVector.x = 2 * (e.clientX / SCREEN_WIDTH) - 1;
+	mouseVector.y = 1 - 2 * ( e.clientY / SCREEN_HEIGHT );
+
+	var raycaster = new THREE.Raycaster();
+	raycaster.setFromCamera(mouseVector, camera);
+	var intersects = raycaster.intersectObjects(particles);
+
+	for( var i = 0; i < intersects.length; i++ ) {
+		var intersection = intersects[ i ],
+			obj = intersection.object;
+		var arraySearch = $.inArray(obj, selectedPoints);
+		if(arraySearch == -1){
+			selectedPoints.push(obj);
+			obj.material.color.setRGB( 1.0 - i / intersects.length, 0, 0 );
+		}else{								
+			selectedPoints = $.grep(selectedPoints, function(value){
+				return value != obj;
+			});
+			obj.material.color.setRGB(0.1, 0.1, 1);
+		}					
+	}	
+
+	console.log(selectedPoints.length);
 }
 
 function createGraph(){	
 	var lineMaterial = new THREE.LineBasicMaterial( { color: 0xffffff, opacity: 1, linewidth: 10 } );	
 	var stockGraph = new THREE.Geometry();	
-	for(var i =0; i<dataAmount; i++){
+	for(var i =weekStart; i<dataAmount; i++){
 		var weekData = stockData[i];		
 		var p = parseFloat(weekData.price) * factor;
 		var r = parseFloat(weekData.range) * factor;
@@ -187,13 +248,10 @@ function createGraph(){
 	graphedLine = new THREE.Line(stockGraph, lineMaterial);
 	scene.add(graphedLine);
 
-	var pMaterial = new THREE.PointsMaterial({
-      color: 0x2222FF,
-      size: 5
-    });
-
 	if(particles.length > 0){
-    	scene.remove(particles);
+		for(var j=0;j<particles.length;j++){
+    		scene.remove(particles[j]);
+    	}
     	particles = [];
     }    	
 
@@ -208,9 +266,10 @@ function createGraph(){
 		particles.push(particle);		
 		scene.add(particle);
     }
-        
+    selectedPoints = [];
 
-	/*if(shownSprites.length > 0){
+    var shownSprites = [];
+	if(shownSprites.length > 0){
 		for(i=0; i< shownSprites.length;i++){
 			scene.remove(shownSprites[i]);
 		}
@@ -219,11 +278,11 @@ function createGraph(){
 
 	for (i = 0; i < stockGraph.vertices.length; i++)
 	{
-		var spritey = makeTextSprite( " " + i + " ", { fontsize: 32, backgroundColor: {r:255, g:100, b:100, a:1} } );
-		spritey.position = stockGraph.vertices[i].clone().multiplyScalar(1.1);
+		var spritey = makeTextSprite( " " + i + " ", { fontsize: 24, backgroundColor: {r:255, g:100, b:100, a:1} } );		
+		spritey.position.set(stockGraph.vertices[i].x, stockGraph.vertices[i].y, stockGraph.vertices[i].z);
 		scene.add( spritey );
 		shownSprites.push(spritey);
-	}*/
+	}
 }
 
 function toggleGridlines( value){
@@ -306,7 +365,7 @@ function makeTextSprite( message, parameters )
 	var spriteMaterial = new THREE.SpriteMaterial( 
 		{ map: texture, color: 0x0000dd} );
 	var sprite = new THREE.Sprite( spriteMaterial );
-	sprite.scale.set(100,50,1.0);
+	sprite.scale.set(50,25,1.0);
 	return sprite;	
 }
 
