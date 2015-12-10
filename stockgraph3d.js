@@ -1,12 +1,5 @@
 //3d stock grapher js
 
-//uses code from
-/*
-	Three.js "tutorials by example"
-	Author: Lee Stemkoski
-	Date: July 2013 (three.js v59dev)
- */
-
 // MAIN
 
 // standard global variables
@@ -15,6 +8,10 @@ var container, scene, camera, renderer, controls, gui;
 var gridXY, gridYZ, gridXZ;
 
 var projector, mouseVector;
+
+//magic values to get sprites better aligned with points
+var xAdjust = 19;
+var yAdjust = -7;
 
 var Parameters;
 
@@ -30,7 +27,9 @@ var autoUpdate = true, gridlinesShowing = true, displayToggle = true;
 
 var SCREEN_WIDTH, SCREEN_HEIGHT;
 
-var selectedPoints = [], graphedLines = [], shownSprites = [], particles = [];
+var selectedPoints = [], graphedLines = [], shownSprites = [], particles = [], shownSprites = [];
+
+var selectedPointCount;
 
 var weekStart = 0;
 
@@ -115,6 +114,8 @@ function init()
 	hexCubeMesh = new THREE.EdgesHelper(sphereMesh, 0x00ff00, 0.1);	
 	scene.add(hexCubeMesh);
 
+	selectedPointCount = 0;
+
 	gui = new dat.GUI();
 	
 	Parameters = function()
@@ -129,10 +130,13 @@ function init()
 	var gui_mult_factor = gui.add(this, 'factor', 1, 5000).name('* factor');
 	var gui_week_start = gui.add(this, 'weekStart', 0, stockData.length).name('start');
 	var gui_range_weeks = gui.add(this, 'dataAmount', 1, stockData.length - 1).name('# of weeks');
-	var gui_display_toggle = gui.add(this, 'displayToggle').name('Display Toggle');	
+	var gui_display_toggle = gui.add(this, 'displayToggle').name('Display Grid');	
 	var gui_draw_splines = gui.add(this, 'drawSplines').name('Draw Splines');
 	var gui_hide_splines = gui.add(this, 'hideSplines').name('Hide Splines');
 	var gui_select_points = gui.add(this, 'resetSelectedPoints').name('Reset Points Selected');
+
+	/*var gui_x_adjust = gui.add(this, 'xAdjust', 1, 100).name('x adjust');
+	var gui_y_adjust = gui.add(this, 'yAdjust', -100, 100).name('y adjust');*/
 
 	autoUpdate = true;
 
@@ -146,6 +150,7 @@ function init()
 	gui_mult_factor.setValue(1000);
 	gui_range_weeks.setValue(10);	
 	gui_week_start.setValue(0);
+	gui_display_toggle.setValue(true);
 
 	/*for (var i = 0; i < geometry.vertices.length; i++)
 	{
@@ -155,19 +160,6 @@ function init()
 	}*/
 
 	createGraph();
-}
-
-function resetSelectedPoints(){
-	for(var j=0; j<selectedPoints.length;j++){
-		selectedPoints[j].material.color.setRGB(0.1, 0.1, 1);
-	}
-	selectedPoints = [];
-}
-
-function hideSplines(){
-	for(var i = 0; i<graphedLines.length; i++){
-		scene.remove(graphedLines[i]);
-	}
 }
 
 function drawSplines(){
@@ -213,22 +205,47 @@ function onMouseDown(e){
 	raycaster.setFromCamera(mouseVector, camera);
 	var intersects = raycaster.intersectObjects(particles);
 
+	var selectedPoint;
+	var deSelectedPoint;
+
 	for( var i = 0; i < intersects.length; i++ ) {
 		var intersection = intersects[ i ],
 			obj = intersection.object;
 		var arraySearch = $.inArray(obj, selectedPoints);
 		if(arraySearch == -1){
+			selectedPoint = obj;
 			selectedPoints.push(obj);
 			obj.material.color.setRGB( 1.0 - i / intersects.length, 0, 0 );
-		}else{								
+		}else{
+			deSelectedPoint = obj;								
 			selectedPoints = $.grep(selectedPoints, function(value){
 				return value != obj;
 			});
 			obj.material.color.setRGB(0.1, 0.1, 1);
 		}					
-	}	
+	}
 
-	console.log(selectedPoints.length);
+	if(selectedPoint){		
+		selectedPointCount++;
+		var spritey = makeTextSprite( " " + selectedPointCount + " ", { fontsize: 24, backgroundColor: {r:255, g:100, b:100, a:1} } );		
+		spritey.position.set(selectedPoint.geometry.vertices[0].x + xAdjust, selectedPoint.geometry.vertices[0].y + yAdjust, selectedPoint.geometry.vertices[0].z);
+		scene.add( spritey );
+		shownSprites.push(spritey);
+			
+	}else if(deSelectedPoint){
+		hideSprites();
+		selectedPointCount = 0;
+		for(var o = 0; o<selectedPoints.length;o++){
+			selectedPointCount++;
+			var spritey = makeTextSprite( " " + selectedPointCount + " ", { fontsize: 24, backgroundColor: {r:255, g:100, b:100, a:1} } );		
+			spritey.position.set(selectedPoints[o].geometry.vertices[0].x + xAdjust, selectedPoints[o].geometry.vertices[0].y + yAdjust, selectedPoints[o].geometry.vertices[0].z);
+			scene.add( spritey );
+			shownSprites.push(spritey);
+		}
+	}
+
+	deSelectedPoint = null;
+	selectedPoint = null;	
 }
 
 function createGraph(){	
@@ -266,22 +283,28 @@ function createGraph(){
 		particles.push(particle);		
 		scene.add(particle);
     }
-    selectedPoints = [];
+    selectedPoints = [];    
+}
 
-    var shownSprites = [];
-	if(shownSprites.length > 0){
-		for(i=0; i< shownSprites.length;i++){
-			scene.remove(shownSprites[i]);
-		}
-		shownSprites = [];
+function hideSprites(){
+	for(var s = 0; s<shownSprites.length;s++){
+			var spriteo = shownSprites[s];
+			scene.remove(spriteo);			
+	}		
+	shownSprites = [];		
+}
+
+function resetSelectedPoints(){
+	for(var j=0; j<selectedPoints.length;j++){
+		selectedPoints[j].material.color.setRGB(0.1, 0.1, 1);
 	}
+	selectedPoints = [];
+	hideSprites();
+}
 
-	for (i = 0; i < stockGraph.vertices.length; i++)
-	{
-		var spritey = makeTextSprite( " " + i + " ", { fontsize: 24, backgroundColor: {r:255, g:100, b:100, a:1} } );		
-		spritey.position.set(stockGraph.vertices[i].x, stockGraph.vertices[i].y, stockGraph.vertices[i].z);
-		scene.add( spritey );
-		shownSprites.push(spritey);
+function hideSplines(){
+	for(var i = 0; i<graphedLines.length; i++){
+		scene.remove(graphedLines[i]);
 	}
 }
 
@@ -308,6 +331,34 @@ function toggleGridlines( value){
 		}
 	}
 }
+
+function animate() 
+{
+    requestAnimationFrame( animate );
+	render();		
+	update();
+}
+
+function update()
+{
+	if ( keyboard.pressed("z") ) 
+	{	// do something   
+	}
+	
+	controls.update();	
+}
+
+function render() 
+{
+	renderer.render( scene, camera );
+}
+
+//this and below method from 
+/*
+	Three.js "tutorials by example"
+	Author: Lee Stemkoski
+	Date: July 2013 (three.js v59dev)
+ */
 
 function makeTextSprite( message, parameters )
 {
@@ -385,27 +436,6 @@ function roundRect(ctx, x, y, w, h, r)
     ctx.closePath();
     ctx.fill();
 	ctx.stroke();   
-}
-
-function animate() 
-{
-    requestAnimationFrame( animate );
-	render();		
-	update();
-}
-
-function update()
-{
-	if ( keyboard.pressed("z") ) 
-	{	// do something   
-	}
-	
-	controls.update();	
-}
-
-function render() 
-{
-	renderer.render( scene, camera );
 }
 
 
